@@ -19,6 +19,10 @@ from datetime import datetime
 import time
 from sklearn.cluster import KMeans
 import plotly.express as px
+import warnings
+
+# Add this at the start of the file, after imports
+warnings.filterwarnings('ignore', message='X does not have valid feature names')
 
 # Configure Gemini API
 try:
@@ -99,7 +103,7 @@ def load_css():
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
-        background: linear-gradient(135deg, #1E88E5, #64B5F6);
+        background: linear-gradient(135deg, #1E88E5,rgb(23, 26, 28));
     }
     
     /* Form styles */
@@ -318,23 +322,111 @@ def show_welcome_message():
     # Create a placeholder for the welcome message
     welcome_placeholder = st.empty()
     
-    # Show welcome message
+    # Show welcome message with enhanced styling and animations
     welcome_placeholder.markdown("""
     <style>
-    .welcome-message {
-        font-size: 2.5em;
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(20px); }
+    }
+    
+    .welcome-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 80vh;
         text-align: center;
+        animation: fadeIn 1s ease-out;
+    }
+    
+    .welcome-message {
+        font-size: 3.5em;
         color: #1E88E5;
-        margin: 2em 0;
+        margin-bottom: 0.5em;
+        font-weight: bold;
+        animation: fadeIn 1s ease-out 0.3s both;
+    }
+    
+    .welcome-subtitle {
+        font-size: 2em;
+        color: #82B1FF;
+        margin-top: 0.5em;
+        animation: fadeIn 1s ease-out 0.6s both;
+    }
+    
+    .fade-out {
+        animation: fadeOut 1s ease-in forwards;
     }
     </style>
-    <div class="welcome-message">
-        Welcome to Personal Finance Manager
+    <div class="welcome-container">
+        <div class="welcome-message">
+            Welcome to Personal Finance Manager
+        </div>
+        <div class="welcome-subtitle">
+            Plan smarter with AI
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Wait for 3 seconds
-    time.sleep(3)
+    # Wait for 2 seconds to show the message
+    time.sleep(2)
+    
+    # Add fade-out animation
+    welcome_placeholder.markdown("""
+    <style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(20px); }
+    }
+    
+    .welcome-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 80vh;
+        text-align: center;
+        animation: fadeIn 1s ease-out, fadeOut 1s ease-in 2s forwards;
+    }
+    
+    .welcome-message {
+        font-size: 3.5em;
+        color: #1E88E5;
+        margin-bottom: 0.5em;
+        font-weight: bold;
+        animation: fadeIn 1s ease-out 0.3s both, fadeOut 1s ease-in 2s forwards;
+    }
+    
+    .welcome-subtitle {
+        font-size: 2em;
+        color: #82B1FF;
+        margin-top: 0.5em;
+        animation: fadeIn 1s ease-out 0.6s both, fadeOut 1s ease-in 2s forwards;
+    }
+    </style>
+    <div class="welcome-container">
+        <div class="welcome-message">
+            Welcome to Personal Finance Manager
+        </div>
+        <div class="welcome-subtitle">
+            Plan smarter with AI
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Wait for the fade-out animation to complete
+    time.sleep(1)
     
     # Clear the welcome message
     welcome_placeholder.empty()
@@ -344,10 +436,12 @@ def show_centered_title():
     <style>
     .centered-title {
         text-align: center;
-        font-size: 2.5em;
-        color: #1E88E5;
+        font-size: 3em;
+        background: linear-gradient(135deg, #2962FF, #82B1FF);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin: 1em 0;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        text-shadow: none;
         font-weight: bold;
     }
     </style>
@@ -461,25 +555,29 @@ def preprocess_data(budget, transactions, monthly_summary, investment):
         # Define the feature columns in the correct order (excluding Savings)
         feature_columns = ['Month', 'Income', 'Expenses', 'Budgeted', 'Category']
         
+        # Ensure combined_data has the correct column order
+        combined_data = combined_data[feature_columns + ['Savings']]
+        
         # Scale only the numerical features (excluding Savings)
         scaler = StandardScaler()
         numerical_cols = ['Income', 'Expenses', 'Budgeted']
-        combined_data[numerical_cols] = scaler.fit_transform(combined_data[numerical_cols])
+        combined_data[numerical_cols] = pd.DataFrame(
+            scaler.fit_transform(combined_data[numerical_cols]),
+            columns=numerical_cols,
+            index=combined_data.index
+        )
         
-        # Store the feature columns order in session state
-        st.session_state.feature_columns = feature_columns
-        
-        return combined_data, scaler, le
+        return combined_data, scaler, le, feature_columns
     except Exception as e:
         print("❌ Error in data preprocessing:", traceback.format_exc())
         raise e
 
 # Step 4: Model Training and Evaluation
 @st.cache_data(ttl=3600)
-def train_and_evaluate_models(data):
+def train_and_evaluate_models(data, feature_columns):
     try:
         # Use only the feature columns for X
-        X = data[st.session_state.feature_columns]
+        X = data[feature_columns].copy()
         y = data['Savings']
         
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -573,7 +671,6 @@ def train_clustering_model(data):
         # Scale the features
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        X_scaled = pd.DataFrame(X_scaled, columns=features)
         
         # Define cluster centers based on typical financial profiles
         initial_centers = np.array([
@@ -594,7 +691,10 @@ def train_clustering_model(data):
             n_init=1,
             random_state=42
         )
-        clusters = kmeans.fit_predict(X_scaled)
+        
+        # Fit the model
+        kmeans.fit(X_scaled)
+        clusters = kmeans.predict(X_scaled)
         
         # Calculate cluster centers and characteristics
         cluster_centers = pd.DataFrame(
@@ -641,48 +741,14 @@ def assign_cluster(profile_data, kmeans_model, scaler, cluster_names, features):
         expense_ratio = (expenses / income) * 100 if income > 0 else 0
         investment_ratio = (savings / expenses) * 100 if expenses > 0 else 0
         
-        # Display detailed debugging information
-        st.write("### Financial Profile Analysis")
-        st.write("#### Input Values:")
-        st.write(f"- Income: ${income:,.2f}")
-        st.write(f"- Expenses: ${expenses:,.2f}")
-        st.write(f"- Savings: ${savings:,.2f}")
-        
-        st.write("#### Calculated Ratios:")
-        st.write(f"- Savings Rate: {savings_rate:.2f}% (Savings/Income)")
-        st.write(f"- Expense Ratio: {expense_ratio:.2f}% (Expenses/Income)")
-        st.write(f"- Investment Ratio: {investment_ratio:.2f}% (Savings/Expenses)")
-        
-        # Create feature vector
-        X = pd.DataFrame([[
-            savings_rate,
-            expense_ratio,
-            investment_ratio
-        ]], columns=features)
-        
-        # Handle any infinite values
-        X = X.replace([np.inf, -np.inf], np.nan)
-        X = X.fillna(0)
-        
-        # Print raw feature vector
-        st.write("### Raw Feature Vector")
-        st.write(X)
+        # Create feature vector for clustering
+        X = np.array([[savings_rate, expense_ratio, investment_ratio]])
         
         # Scale features
         X_scaled = scaler.transform(X)
-        X_scaled = pd.DataFrame(X_scaled, columns=features)
-        
-        # Print scaled feature vector
-        st.write("### Scaled Feature Vector")
-        st.write(X_scaled)
         
         # Calculate distances to all cluster centers
         distances = kmeans_model.transform(X_scaled)
-        
-        # Print distances to each cluster
-        st.write("### Distances to Cluster Centers")
-        for i, dist in enumerate(distances[0]):
-            st.write(f"Distance to Cluster {i} ({cluster_names[i]}): {dist:.2f}")
         
         # Predict cluster
         cluster = kmeans_model.predict(X_scaled)[0]
@@ -690,14 +756,6 @@ def assign_cluster(profile_data, kmeans_model, scaler, cluster_names, features):
         # Get cluster characteristics
         cluster_center = st.session_state.cluster_centers.iloc[cluster]
         cluster_stats = st.session_state.cluster_characteristics[cluster]
-        
-        st.write("#### Cluster Assignment Details:")
-        st.write(f"Assigned Cluster: {cluster_names[cluster]}")
-        st.write("#### Cluster Characteristics (Based on Training Data):")
-        st.write(f"- Average Savings Rate: {cluster_stats['avg_savings_rate']:.2f}%")
-        st.write(f"- Average Expense Ratio: {cluster_stats['avg_expense_ratio']:.2f}%")
-        st.write(f"- Average Investment Ratio: {cluster_stats['avg_investment_ratio']:.2f}%")
-        st.write(f"- Number of Similar Profiles: {cluster_stats['size']}")
         
         return cluster_names[cluster]
     except Exception as e:
@@ -1047,6 +1105,7 @@ def main():
             st.session_state.scaler = None
             st.session_state.le = None
             st.session_state.results = None
+            st.session_state.feature_columns = None  # Initialize feature_columns
             
             # Initialize clustering model and related components
             st.session_state.clustering_model = None
@@ -1071,6 +1130,31 @@ def main():
                     st.error("Failed to load data. Please check the error messages above.")
                     return
                 
+                # Display dataset shapes
+                st.write("### Dataset Shapes")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Budget Dataset:**")
+                    st.write(f"Rows: {budget.shape[0]}, Columns: {budget.shape[1]}")
+                    st.write("**Transactions Dataset:**")
+                    st.write(f"Rows: {transactions.shape[0]}, Columns: {transactions.shape[1]}")
+                with col2:
+                    st.write("**Monthly Summary Dataset:**")
+                    st.write(f"Rows: {monthly_summary.shape[0]}, Columns: {monthly_summary.shape[1]}")
+                    st.write("**Investment Dataset:**")
+                    st.write(f"Rows: {investment.shape[0]}, Columns: {investment.shape[1]}")
+                
+                # Display column names for each dataset
+                with st.expander("View Dataset Details"):
+                    st.write("**Budget Dataset Columns:**")
+                    st.write(budget.columns.tolist())
+                    st.write("**Transactions Dataset Columns:**")
+                    st.write(transactions.columns.tolist())
+                    st.write("**Monthly Summary Dataset Columns:**")
+                    st.write(monthly_summary.columns.tolist())
+                    st.write("**Investment Dataset Columns:**")
+                    st.write(investment.columns.tolist())
+                
                 st.session_state.budget = budget
                 st.session_state.transactions = transactions
                 st.session_state.monthly_summary = monthly_summary
@@ -1080,10 +1164,25 @@ def main():
                     budget, transactions, monthly_summary, investment = engineer_features(
                         budget, transactions, monthly_summary, investment
                     )
-                    combined_data, scaler, le = preprocess_data(
+                    combined_data, scaler, le, feature_columns = preprocess_data(
                         budget, transactions, monthly_summary, investment
                     )
-                    results = train_and_evaluate_models(combined_data)
+                    
+                    # Display combined data shape
+                    st.write("### Combined Data Shape")
+                    st.write(f"Rows: {combined_data.shape[0]}, Columns: {combined_data.shape[1]}")
+                    st.write("### Combined Data Columns")
+                    st.write(combined_data.columns.tolist())
+                    
+                    # Display sample of combined data
+                    with st.expander("View Sample of Combined Data"):
+                        st.dataframe(combined_data.head())
+                    
+                    # Store feature columns in session state before using it
+                    st.session_state.feature_columns = feature_columns
+                    
+                    # Pass feature_columns to train_and_evaluate_models
+                    results = train_and_evaluate_models(combined_data, feature_columns)
                     
                     # Initialize clustering model
                     kmeans, cluster_scaler, cluster_names, features = train_clustering_model(combined_data)
@@ -1367,27 +1466,105 @@ def main():
                 key="metric_selector"
             )
             
-            # Create interactive plot
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=st.session_state.monthly_summary['Month_Name'],
-                y=st.session_state.monthly_summary[selected_metric],
-                mode='lines+markers',
-                name=selected_metric,
-                line=dict(width=3),
-                marker=dict(size=8)
-            ))
+            # Create two columns for side-by-side plots
+            col1, col2 = st.columns(2)
             
-            fig.update_layout(
-                title=f"Monthly {selected_metric} Trend",
-                xaxis_title="Month",
-                yaxis_title=f"{selected_metric} ($)",
-                hovermode='x unified',
-                template='plotly_white',
-                height=500
-            )
+            with col1:
+                # Monthly trend plot
+                fig1 = go.Figure()
+                fig1.add_trace(go.Scatter(
+                    x=st.session_state.monthly_summary['Month_Name'],
+                    y=st.session_state.monthly_summary[selected_metric],
+                    mode='lines+markers',
+                    name=selected_metric,
+                    line=dict(width=2, color='#2962FF'),
+                    marker=dict(size=8, color='#2962FF')
+                ))
+                
+                fig1.update_layout(
+                    title={
+                        'text': f"Monthly {selected_metric} Trend",
+                        'y':0.95,
+                        'x':0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    },
+                    xaxis_title="Month",
+                    yaxis_title=f"{selected_metric} ($)",
+                    hovermode='x unified',
+                    template='plotly_white',
+                    height=400,
+                    showlegend=False,
+                    margin=dict(l=50, r=50, t=80, b=50),
+                    xaxis=dict(
+                        tickangle=45,
+                        tickfont=dict(size=10),
+                        nticks=6
+                    ),
+                    yaxis=dict(
+                        tickprefix="$",
+                        tickformat=",.0f",
+                        gridcolor='lightgray',
+                        zerolinecolor='lightgray'
+                    )
+                )
+                
+                st.plotly_chart(fig1, use_container_width=True)
             
-            st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                # Distribution histogram
+                fig2 = go.Figure()
+                fig2.add_trace(go.Histogram(
+                    x=st.session_state.monthly_summary[selected_metric],
+                    name=selected_metric,
+                    nbinsx=10,
+                    marker_color='#2962FF',
+                    opacity=0.7,
+                    histnorm='percent',
+                    hovertemplate="<b>Range: %{x}</b><br>" +
+                                "Percentage: %{y:.1f}%<br>" +
+                                "<extra></extra>"
+                ))
+                
+                # Add a vertical line for mean
+                mean_value = st.session_state.monthly_summary[selected_metric].mean()
+                fig2.add_vline(
+                    x=mean_value,
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text=f"Mean: ${mean_value:,.0f}",
+                    annotation_position="top right"
+                )
+                
+                fig2.update_layout(
+                    title={
+                        'text': f"Distribution of {selected_metric}",
+                        'y':0.95,
+                        'x':0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    },
+                    xaxis_title=f"{selected_metric} ($)",
+                    yaxis_title="Percentage (%)",
+                    hovermode='x unified',
+                    template='plotly_white',
+                    height=400,
+                    showlegend=False,
+                    margin=dict(l=50, r=50, t=80, b=50),
+                    xaxis=dict(
+                        tickprefix="$",
+                        tickformat=",.0f",
+                        gridcolor='lightgray',
+                        zerolinecolor='lightgray'
+                    ),
+                    yaxis=dict(
+                        tickformat=".1f",
+                        gridcolor='lightgray',
+                        zerolinecolor='lightgray'
+                    )
+                )
+                
+                st.plotly_chart(fig2, use_container_width=True)
             
             # Add summary statistics
             st.subheader("Summary Statistics")
@@ -1396,13 +1573,15 @@ def main():
                 'Mean': [st.session_state.monthly_summary[selected_metric].mean()],
                 'Median': [st.session_state.monthly_summary[selected_metric].median()],
                 'Min': [st.session_state.monthly_summary[selected_metric].min()],
-                'Max': [st.session_state.monthly_summary[selected_metric].max()]
+                'Max': [st.session_state.monthly_summary[selected_metric].max()],
+                'Std Dev': [st.session_state.monthly_summary[selected_metric].std()]
             })
             st.dataframe(stats_df.style.format({
                 'Mean': '${:,.2f}',
                 'Median': '${:,.2f}',
                 'Min': '${:,.2f}',
-                'Max': '${:,.2f}'
+                'Max': '${:,.2f}',
+                'Std Dev': '${:,.2f}'
             }))
 
         elif current_page == "Predictions":
@@ -1465,14 +1644,18 @@ def main():
                         'Expenses': [expenses],
                         'Budgeted': [budgeted],
                         'Category': [category_encoded]
-                    })
+                    }, columns=st.session_state.feature_columns)
                     
                     # Ensure columns are in the same order as during training
                     input_df = input_df[st.session_state.feature_columns]
                     
                     # Scale only the numerical columns
                     numerical_cols = ['Income', 'Expenses', 'Budgeted']
-                    input_df[numerical_cols] = st.session_state.scaler.transform(input_df[numerical_cols])
+                    input_df[numerical_cols] = pd.DataFrame(
+                        st.session_state.scaler.transform(input_df[numerical_cols]),
+                        columns=numerical_cols,
+                        index=input_df.index
+                    )
                     
                     # Make predictions
                     predictions = {}
@@ -1676,59 +1859,81 @@ def main():
             elif analysis_type == "Investment Analysis":
                 st.subheader("Investment Analysis")
                 
-                # Investment performance
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=st.session_state.investment['Date'],
-                    y=st.session_state.investment['Current_Value'],
-                    mode='lines+markers',
-                    name='Current Value',
-                    line=dict(width=3)
-                ))
+                # Verify investment data exists and has required columns
+                if st.session_state.investment is None or st.session_state.investment.empty:
+                    st.warning("No investment data available.")
+                    return
+                    
+                # Check for date column with different possible names
+                date_column = None
+                possible_date_columns = ['Date', 'date', 'Date_of_Investment', 'date_of_investment']
+                for col in possible_date_columns:
+                    if col in st.session_state.investment.columns:
+                        date_column = col
+                        break
+                        
+                if date_column is None:
+                    st.error("Could not find date column in investment data.")
+                    return
                 
-                fig.update_layout(
-                    title="Investment Portfolio Value Over Time",
-                    xaxis_title="Date",
-                    yaxis_title="Value ($)",
-                    template='plotly_white'
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Investment returns
-                st.session_state.investment['Return'] = ((st.session_state.investment['Current_Value'] - st.session_state.investment['Amount_Invested']) / st.session_state.investment['Amount_Invested']) * 100
-                
-                fig2 = go.Figure()
-                fig2.add_trace(go.Bar(
-                    x=st.session_state.investment['Date'],
-                    y=st.session_state.investment['Return'],
-                    text=[f'{v:.1f}%' for v in st.session_state.investment['Return']],
-                    textposition='auto',
-                ))
-                
-                fig2.update_layout(
-                    title="Investment Returns by Date",
-                    xaxis_title="Date",
-                    yaxis_title="Return (%)",
-                    template='plotly_white'
-                )
-                
-                st.plotly_chart(fig2, use_container_width=True)
-                
-                # Investment insights
-                st.subheader("Investment Insights")
-                total_invested = st.session_state.investment['Amount_Invested'].sum()
-                current_value = st.session_state.investment['Current_Value'].sum()
-                total_return = ((current_value - total_invested) / total_invested) * 100
-                
-                st.write(f"Total Amount Invested: ${total_invested:,.2f}")
-                st.write(f"Current Portfolio Value: ${current_value:,.2f}")
-                st.write(f"Total Return: {total_return:.1f}%")
-                
-                if total_return > 0:
-                    st.success(f"Your investments are performing well with a {total_return:.1f}% return!")
-                else:
-                    st.warning("Your investments are currently underperforming. Consider reviewing your investment strategy.")
+                try:
+                    # Investment performance
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=st.session_state.investment[date_column],
+                        y=st.session_state.investment['Current_Value'],
+                        mode='lines+markers',
+                        name='Current Value',
+                        line=dict(width=3)
+                    ))
+                    
+                    fig.update_layout(
+                        title="Investment Portfolio Value Over Time",
+                        xaxis_title="Date",
+                        yaxis_title="Value ($)",
+                        template='plotly_white'
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Investment returns
+                    st.session_state.investment['Return'] = ((st.session_state.investment['Current_Value'] - st.session_state.investment['Amount_Invested']) / st.session_state.investment['Amount_Invested']) * 100
+                    
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Bar(
+                        x=st.session_state.investment[date_column],
+                        y=st.session_state.investment['Return'],
+                        text=[f'{v:.1f}%' for v in st.session_state.investment['Return']],
+                        textposition='auto',
+                    ))
+                    
+                    fig2.update_layout(
+                        title="Investment Returns by Date",
+                        xaxis_title="Date",
+                        yaxis_title="Return (%)",
+                        template='plotly_white'
+                    )
+                    
+                    st.plotly_chart(fig2, use_container_width=True)
+                    
+                    # Investment insights
+                    st.subheader("Investment Insights")
+                    total_invested = st.session_state.investment['Amount_Invested'].sum()
+                    current_value = st.session_state.investment['Current_Value'].sum()
+                    total_return = ((current_value - total_invested) / total_invested) * 100
+                    
+                    st.write(f"Total Amount Invested: ${total_invested:,.2f}")
+                    st.write(f"Current Portfolio Value: ${current_value:,.2f}")
+                    st.write(f"Total Return: {total_return:.1f}%")
+                    
+                    if total_return > 0:
+                        st.success(f"Your investments are performing well with a {total_return:.1f}% return!")
+                    else:
+                        st.warning("Your investments are currently underperforming. Consider reviewing your investment strategy.")
+                    
+                except Exception as e:
+                    st.error(f"An error occurred while processing investment data: {str(e)}")
+                    st.error("Please try refreshing the page or contact support if the issue persists.")
 
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
